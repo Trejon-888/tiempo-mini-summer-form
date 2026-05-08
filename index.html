@@ -159,7 +159,7 @@
     color: #fff;
     border-color: var(--navy);
   }
-  .checkboxes input { position: absolute; opacity: 0; pointer-events: none; }
+  .checkboxes input { position: absolute; opacity: 0; width: 0; height: 0; }
 
   /* Child block */
   .children-list { display: grid; gap: 16px; }
@@ -589,14 +589,9 @@
       // Hide add button until under cap
       addBtn.style.display = $$('.child-block').length >= MAX_CHILDREN ? 'none' : '';
     });
-    $$('.checkboxes label', div).forEach(lbl => {
-      lbl.addEventListener('click', (e) => {
-        // Allow clicking the label area (input is hidden)
-        if (e.target.tagName !== 'INPUT') {
-          const cb = $('input', lbl);
-          cb.checked = !cb.checked;
-        }
-        lbl.classList.toggle('checked', $('input', lbl).checked);
+    $$('.checkboxes input', div).forEach(input => {
+      input.addEventListener('change', () => {
+        input.closest('label').classList.toggle('checked', input.checked);
       });
     });
 
