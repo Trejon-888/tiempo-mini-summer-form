@@ -203,7 +203,8 @@
   .tier-badge.tinies { background: rgba(227,30,36,0.1); color: var(--red); }
   .tier-badge.foundations { background: rgba(10,39,86,0.1); color: var(--navy); }
   .tier-badge.tbd { background: var(--grey-light); color: var(--grey); }
-  .tier-badge.invalid { background: #FEF2F2; color: var(--red-dark); }
+  .tier-badge.invalid { background: #FEF3C7; color: #92400E; }
+  .pay-item .pill.invalid { background: #FEF3C7; color: #92400E; }
 
   /* Buttons */
   .add-btn {
@@ -438,7 +439,7 @@
       </div>
 
       <div class="note">
-        <strong>Important:</strong> Each athlete requires a separate payment. Click each button above and complete the secure CardPointe payment. You'll receive a separate confirmation email after each payment is processed.
+        <strong>Important:</strong> Athletes ages 6-14 need a separate payment per kid — click each button above and complete the secure CardPointe checkout. Confirmation email per payment. Any athlete outside the 6-14 range has been saved as a lead; a Tiempo coach will reach out to discuss fit before any payment.
       </div>
     </div>
   </div>
@@ -511,7 +512,7 @@
       badge.textContent = `Foundations · Ages 8-14 · $${PRICES.foundations}`;
     } else if (tier === 'invalid') {
       badge.classList.add('invalid');
-      badge.textContent = `Age ${age} is outside the 6-14 program range`;
+      badge.textContent = `Age ${age} · Outside 6-14 range · Coach will follow up`;
     } else {
       badge.classList.add('tbd');
       badge.textContent = 'Tier shown after birth date entered';
@@ -622,7 +623,8 @@
       const days = $$(`input[name=child_days_${idx}]:checked`).length;
       if (days === 0) errors.push(`Athlete ${num}: pick at least one preferred day.`);
       const tier = block.dataset.tier;
-      if (tier === 'invalid' || !tier) errors.push(`Athlete ${num}: age must be between 6 and 14 (as of July 8 program start).`);
+      if (!tier) errors.push(`Athlete ${num}: enter a valid date of birth.`);
+      // age outside 6-14 is allowed — submitted as lead for coach follow-up, no payment routed
     });
 
     if (errors.length) {
@@ -668,13 +670,16 @@
     if (!FORM_ENDPOINT) return { ok: false, fallback: true };
     try {
       // Flatten children into readable email body
+      const tierLabel = (t) => t === 'tinies' ? 'TINIES $699' : t === 'foundations' ? 'FOUNDATIONS $799' : '⚠️ LEAD-REVIEW (outside 6-14 range, coach to follow up)';
       const summary = data.children.map((c, i) =>
-        `Child ${i + 1}: ${c.name} | DOB ${c.dob} (age ${c.age}) | ${c.tier} ($${c.price}) | Exp: ${c.experience} | Club: ${c.club} | Days: ${c.preferred_days}`
+        `Child ${i + 1}: ${c.name} | DOB ${c.dob} (age ${c.age}) | ${tierLabel(c.tier)} | Exp: ${c.experience} | Club: ${c.club} | Days: ${c.preferred_days}`
       ).join('\n');
+      const leadCount = data.children.filter(c => c.tier !== 'tinies' && c.tier !== 'foundations').length;
+      const subjectSuffix = leadCount > 0 ? ` — includes ${leadCount} LEAD(s) for coach review` : '';
 
       const payload = {
         ...data,
-        _subject: `Mini Summer Reg — ${data.parent_name} — ${data.children.length} athlete(s) — $${data.total}`,
+        _subject: `Mini Summer Reg — ${data.parent_name} — ${data.children.length} athlete(s) — $${data.total}${subjectSuffix}`,
         _replyto: data.parent_email,
         summary,
       };
@@ -699,14 +704,19 @@
       `Submitted: ${data.submitted_at}`,
       ``,
       `Athletes (${data.children.length}):`,
-      ...data.children.flatMap((c, i) => [
-        `  ${i + 1}. ${c.name}`,
-        `     DOB: ${c.dob} (age ${c.age})`,
-        `     Tier: ${c.tier} ($${c.price})`,
-        `     Experience: ${c.experience}`,
-        `     Club: ${c.club}`,
-        `     Days: ${c.preferred_days}`,
-      ]),
+      ...data.children.flatMap((c, i) => {
+        const tierLine = c.tier === 'tinies' ? 'TINIES $699'
+                       : c.tier === 'foundations' ? 'FOUNDATIONS $799'
+                       : 'LEAD-REVIEW (outside 6-14 — coach to follow up before payment)';
+        return [
+          `  ${i + 1}. ${c.name}`,
+          `     DOB: ${c.dob} (age ${c.age})`,
+          `     Tier: ${tierLine}`,
+          `     Experience: ${c.experience}`,
+          `     Club: ${c.club}`,
+          `     Days: ${c.preferred_days}`,
+        ];
+      }),
       ``,
       `Total: $${data.total}`,
     ];
@@ -718,16 +728,27 @@
     const list = $('#pay-list');
     list.innerHTML = '';
     data.children.forEach((c, i) => {
-      const tierLabel = c.tier === 'tinies' ? 'Tinies · Ages 6-7' : 'Foundations · Ages 8-14';
       const item = document.createElement('div');
       item.className = 'pay-item';
-      item.innerHTML = `
-        <div class="who">
-          <div class="name">${escapeHtml(c.name)} <span style="font-weight:400;color:var(--grey)">· age ${c.age}</span></div>
-          <div class="pill ${c.tier}">${tierLabel} · $${c.price}</div>
-        </div>
-        <a class="pay-link" href="${PAYMENT_LINKS[c.tier]}" target="_blank" rel="noopener">Pay $${c.price} →</a>
-      `;
+      if (c.tier === 'tinies' || c.tier === 'foundations') {
+        const tierLabel = c.tier === 'tinies' ? 'Tinies · Ages 6-7' : 'Foundations · Ages 8-14';
+        item.innerHTML = `
+          <div class="who">
+            <div class="name">${escapeHtml(c.name)} <span style="font-weight:400;color:var(--grey)">· age ${c.age}</span></div>
+            <div class="pill ${c.tier}">${tierLabel} · $${c.price}</div>
+          </div>
+          <a class="pay-link" href="${PAYMENT_LINKS[c.tier]}" target="_blank" rel="noopener">Pay $${c.price} →</a>
+        `;
+      } else {
+        // Outside 6-14: lead-only, coach reviews and follows up
+        item.innerHTML = `
+          <div class="who">
+            <div class="name">${escapeHtml(c.name)} <span style="font-weight:400;color:var(--grey)">· age ${c.age}</span></div>
+            <div class="pill invalid">Outside age range · Coach will follow up</div>
+          </div>
+          <div style="font-weight:600;color:var(--grey);font-size:13px;text-align:right;max-width:220px">No payment yet — a coach will reach out to discuss fit.</div>
+        `;
+      }
       list.appendChild(item);
     });
     $('#total-amount').textContent = `$${data.total.toLocaleString()}`;
